@@ -79,6 +79,7 @@ fn calculate_due_term_dates(state: &State) -> Vec<NaiveDate> {
     let month_increase = match state.terms_per_year {
         1 => 12,
         2 => 6,
+        3 => 4,
         4 => 3,
         6 => 2,
         12 => 1,

@@ -65,7 +65,7 @@ pub fn parse() -> Result<State, String> {
 
     // Sanify how many terms_per_year we can do
     // I think its safe to assume that only a few combinations make sense
-    const ALLOWED_TERMS_PER_YEAR: [i32; 5] = [1, 2, 4, 6, 12];
+    const ALLOWED_TERMS_PER_YEAR: [i32; 6] = [1, 2, 3, 4, 6, 12];
     if !ALLOWED_TERMS_PER_YEAR.contains(&opt.terms_per_year) {
         return Err(format!(
             "error: The argument '--terms-per-year <num>' must be one of {:?}",
