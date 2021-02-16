@@ -1,6 +1,5 @@
 //! TODO: Process all the things
 
-use crate::plot::create_plot;
 use crate::reports::*;
 
 use chrono::{Datelike, Month, NaiveDate};
@@ -164,16 +163,11 @@ fn compute_day_actions(
     action_dates
 }
 
-pub fn process(state: State) {
-    println!("{:?}", state);
-
-    println!("Starting loan payout date from {}", state.loan_start_date);
-
+pub fn process(state: State) -> (TotalResult, Vec<MonthlyResult>, Vec<DailyResult>) {
     let due_term_dates = calculate_due_term_dates(&state);
     let planned_terms = due_term_dates.len();
 
     let first_term_due_date = calculate_first_term_due_date(&state);
-    println!("First term due {}", first_term_due_date);
     let first_extra_date = NaiveDate::from_ymd(
         first_term_due_date.year(),
         first_term_due_date.month(),
@@ -188,7 +182,6 @@ pub fn process(state: State) {
     let action_dates = compute_day_actions(&state, due_term_dates, vec![extra_payment_dates]);
 
     let term_payment = calculate_annulity_term_payment(&state);
-    println!("Term payment: {}", term_payment);
 
     // Iterate actions_dates to calculate daily_result
     let mut accumulated: f64 = 0.0;
@@ -285,7 +278,5 @@ pub fn process(state: State) {
         planned_terms: planned_terms as i32,
     };
 
-    println!("{:#?}", total);
-
-    create_plot(monthly_result, total).unwrap();
+    return (total, monthly_result, daily_result);
 }

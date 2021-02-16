@@ -1,8 +1,10 @@
 //! A command line utility to calculate a loans lifespan and the costs associated with that.
 
-use interest_calculator::process::*;
+use interest_calculator::plot::create_plot;
+use interest_calculator::*;
 
 use chrono::offset::Utc;
+use chrono::Month;
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
@@ -43,7 +45,7 @@ struct Opt {
     extra_amount: i32,
 }
 
-pub fn parse() -> Result<State, String> {
+pub fn parse() -> Result<LoanInitialization, String> {
     let opt = Opt::from_args();
 
     // Sanify how many terms_per_year we can do
@@ -63,51 +65,55 @@ pub fn parse() -> Result<State, String> {
         (Some(_), Some(_)) => unreachable!(),
     };
 
-    // Get date for start of loan
-    // TODO: Make load payout date configurable
-    let loan_start_date = Utc::now().naive_utc().date();
+    let terms_per_year = match opt.terms_per_year {
+        1 => TermsPerYear::One,
+        2 => TermsPerYear::Two,
+        3 => TermsPerYear::Three,
+        4 => TermsPerYear::Four,
+        6 => TermsPerYear::Six,
+        12 => TermsPerYear::Twelve,
+        _ => panic!("cannot be reached"),
+    };
 
     // Day of month for term due
     // TODO: Make this configurable
     let term_due_day = 20;
 
-    // Calculate effective interest rate
-    let effective_interest = 1.0 + ((opt.interest / 100.0) / opt.terms_per_year as f64);
-    let effective_interest = f64::powi(effective_interest, opt.terms_per_year);
-    let effective_interest = effective_interest - 1.0;
-    let effective_interest = effective_interest * 100.0;
-
-    println!("effective interest: {}", effective_interest);
-
-    Ok(State {
-        loan: opt.loan,
+    let initial = LoanInitialization {
+        loan: opt.loan as f64,
         nominal_interest: opt.interest,
-        effective_interest,
-        fee: opt.fee,
+        administration_fee: 0.0,
+        installment_fee: opt.fee as f64,
 
-        loan_start_date,
-        term_due_day,
+        terms: terms,
+        terms_per_year,
+        due_within_month: MonthlyDueDate::Date(term_due_day),
+        // TODO: Calculate this correctly.
+        first_installment_month: Month::January,
+    };
 
-        terms,
-        terms_per_year: opt.terms_per_year,
-
-        extra_terms: opt.extra_terms,
-        extra_payment_day: opt.extra_payment_day,
-        extra_amount: opt.extra_amount,
-    })
+    Ok(initial)
 }
 
 fn main() {
     #[cfg(wasm)]
     panic::set_hook(Box::new(console_error_panic_hook::hook));
 
-    let state = match parse() {
-        Ok(state) => state,
+    let initial = match parse() {
+        Ok(initial) => initial,
         Err(e) => {
             eprintln!("{}", e);
             return;
         }
     };
 
-    process(state);
+    // Get date for start of loan
+    // TODO: Make load payout date configurable
+    let loan_start_date = Utc::now().naive_utc().date();
+
+    let calculator = InteractiveCalculator::new(loan_start_date, initial);
+    let (total, monthly, _daily) = calculator.compute();
+
+    println!("{:#?}", total);
+    create_plot(monthly, total).unwrap();
 }
