@@ -1,10 +1,9 @@
 //! A command line utility to calculate a loans lifespan and the costs associated with that.
 
-use interest_calculator::plot::create_plot;
 use interest_calculator::*;
 
-use chrono::offset::Utc;
-use chrono::Month;
+use chrono::{Datelike, Month, NaiveDate};
+use num_traits::FromPrimitive;
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
@@ -16,16 +15,19 @@ struct Opt {
     /// Number of terms to pay back the entire loan.
     /// Incompatible with the `years` option.
     #[structopt(short, long)]
-    terms: Option<i32>,
+    terms: Option<u32>,
     /// Number of years to pay back the entire loan.
     /// Spread out across `terms_per_year` to determine the number of terms to cover the
     /// entire loan.
     /// Incompatible with the `terms` option.
     #[structopt(short, long, conflicts_with("terms"))]
-    years: Option<i32>,
+    years: Option<u32>,
     /// Number of terms per year.
     #[structopt(long, default_value = "12")]
-    terms_per_year: i32,
+    terms_per_year: u32,
+    /// The day this loan is payed out.
+    #[structopt(long = "date")]
+    disbursement_date: Option<NaiveDate>,
 
     /// Interest over an entire year.
     #[structopt(short, long, default_value = "1.25")]
@@ -45,12 +47,12 @@ struct Opt {
     extra_amount: i32,
 }
 
-pub fn parse() -> Result<LoanInitialization, String> {
+pub fn parse() -> Result<(NaiveDate, LoanInitialization), String> {
     let opt = Opt::from_args();
 
     // Sanify how many terms_per_year we can do
     // I think its safe to assume that only a few combinations make sense
-    const ALLOWED_TERMS_PER_YEAR: [i32; 6] = [1, 2, 3, 4, 6, 12];
+    const ALLOWED_TERMS_PER_YEAR: [u32; 6] = [1, 2, 3, 4, 6, 12];
     if !ALLOWED_TERMS_PER_YEAR.contains(&opt.terms_per_year) {
         return Err(format!(
             "error: The argument '--terms-per-year <num>' must be one of {:?}",
@@ -75,6 +77,12 @@ pub fn parse() -> Result<LoanInitialization, String> {
         _ => panic!("cannot be reached"),
     };
 
+    let date = match opt.disbursement_date {
+        Some(d) => d,
+        None => chrono::offset::Utc::today().naive_utc(),
+    };
+    let month = Month::from_u32(((date.month0() + 1) % 12) + 1).unwrap();
+
     // Day of month for term due
     // TODO: Make this configurable
     let term_due_day = 20;
@@ -88,18 +96,17 @@ pub fn parse() -> Result<LoanInitialization, String> {
         terms: terms,
         terms_per_year,
         due_within_month: MonthlyDueDate::Date(term_due_day),
-        // TODO: Calculate this correctly.
-        first_installment_month: Month::January,
+        first_installment_month: month,
     };
 
-    Ok(initial)
+    Ok((date, initial))
 }
 
 fn main() {
     #[cfg(wasm)]
     panic::set_hook(Box::new(console_error_panic_hook::hook));
 
-    let initial = match parse() {
+    let (date, initial) = match parse() {
         Ok(initial) => initial,
         Err(e) => {
             eprintln!("{}", e);
@@ -107,13 +114,8 @@ fn main() {
         }
     };
 
-    // Get date for start of loan
-    // TODO: Make load payout date configurable
-    let loan_start_date = Utc::now().naive_utc().date();
-
-    let calculator = InteractiveCalculator::new(loan_start_date, initial);
-    let (total, monthly, _daily) = calculator.compute();
+    let calculator = InteractiveCalculator::new(date, initial);
+    let total = calculator.compute();
 
     println!("{:#?}", total);
-    create_plot(monthly, total).unwrap();
 }

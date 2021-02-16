@@ -44,10 +44,14 @@ pub struct TotalResult {
     /// The total sum of fees associated with the loan repayment plan.
     pub total_fee: f64,
 
-    /// The date this loan started.
-    pub start_date: NaiveDate,
+    /// The date this loan was disbursed.
+    pub disbursement_date: NaiveDate,
+    /// First date of a regular, scheduled repayment installment.
+    pub first_installment_date: NaiveDate,
     /// The date this loan was completely payed back.
     pub end_date: NaiveDate,
     /// The number of total planned terms as of initial loan, transfer or refinance situation.
     pub planned_terms: i32,
+    /// The number of total planned terms as of initial loan, transfer or refinance situation.
+    pub completed_terms: i32,
 }

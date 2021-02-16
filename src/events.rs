@@ -33,7 +33,7 @@ impl LoanEvent {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum MonthlyDueDate {
     /// The 1st of the month.
     First,
@@ -41,7 +41,7 @@ pub enum MonthlyDueDate {
     Mid,
     /// The end, be it 28, 29, 30 or 31.
     End,
-    /// The date could be anywhere in the range 0-31.
+    /// The date could be anywhere in the range 1-31.
     Date(u32),
 }
 
@@ -50,14 +50,14 @@ impl MonthlyDueDate {
         match &*self {
             MonthlyDueDate::First => 1,
             MonthlyDueDate::Mid => 15,
-            MonthlyDueDate::End => 28,
+            MonthlyDueDate::End => 31,
             MonthlyDueDate::Date(d) => *d,
         }
     }
 }
 
 /// Indicate how many installments per year a loan is is configured to have.
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum TermsPerYear {
     One,
     Two,
@@ -96,7 +96,7 @@ pub struct LoanInitialization {
     pub installment_fee: f64,
 
     /// The number of terms this loan should be downpayed over.
-    pub terms: i32,
+    pub terms: u32,
     /// The number of terms per year.
     pub terms_per_year: TermsPerYear,
     /// The time of month, if within a term month, a installment is due.

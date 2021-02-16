@@ -8,8 +8,7 @@ mod calculator;
 mod events;
 pub mod gui;
 pub mod plot;
-pub mod process;
 pub mod reports;
 
-pub use calculator::InteractiveCalculator;
+pub use calculator::{CompoundingStrategy, InteractiveCalculator};
 pub use events::*;
