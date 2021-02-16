@@ -31,12 +31,23 @@ pub struct MonthlyResult {
     pub current_loan: f64,
 }
 
+/// This report includes the total computation of an installment loan.
 #[derive(Debug)]
 pub struct TotalResult {
+    /// The total cost of this loan, including the principal loan sum.
+    /// This field is a sum of the other totals in this result structure.
     pub total_cost: f64,
-    pub loan: i64,
-    pub interest: f64,
-    pub fee: i32,
-    pub completed_terms: i32,
+    /// The total principal loan sum, aggergated over any additional refinancing.
+    pub total_loan: f64,
+    /// The total sum of interest payed on the loan over its duration.
+    pub total_interest: f64,
+    /// The total sum of fees associated with the loan repayment plan.
+    pub total_fee: f64,
+
+    /// The date this loan started.
+    pub start_date: NaiveDate,
+    /// The date this loan was completely payed back.
+    pub end_date: NaiveDate,
+    /// The number of total planned terms as of initial loan, transfer or refinance situation.
     pub planned_terms: i32,
 }

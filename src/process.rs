@@ -271,10 +271,12 @@ pub fn process(state: State) -> (TotalResult, Vec<MonthlyResult>, Vec<DailyResul
 
     let total = TotalResult {
         total_cost: monthly_result.iter().map(|s| s.payed_back).sum(),
-        fee: monthly_result.iter().map(|s| s.fee).sum(),
-        interest: monthly_result.iter().map(|s| s.interest).sum(),
-        loan: state.loan,
-        completed_terms: monthly_result.len() as i32,
+        total_loan: state.loan as f64,
+        total_interest: monthly_result.iter().map(|s| s.interest).sum(),
+        total_fee: monthly_result.iter().map(|s| s.fee).sum::<i32>() as f64,
+
+        start_date: state.loan_start_date.clone(),
+        end_date: daily_result.last().unwrap().date.clone(),
         planned_terms: planned_terms as i32,
     };
 
