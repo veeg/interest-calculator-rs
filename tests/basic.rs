@@ -26,6 +26,7 @@ fn interactive_calculator_initial_event() {
     println!("{:#?}", summary);
 
     assert_eq!(summary.total_loan, 1000.0);
+    assert!(summary.total_interest > 10.0);
     assert_eq!(summary.start_date, loan_start_date);
     assert_eq!(summary.end_date, NaiveDate::from_ymd(2022, 1, 1));
 }
