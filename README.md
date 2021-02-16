@@ -10,3 +10,10 @@ It allows to customize:
  * This allows one to see the impact of changing the monthly downpayment for an extended or the entire period of the loan.
 
  As a bonus, a simple plot is generated to show each term payment and loan progress.
+
+## Web
+
+To build the web based application, you must have the `wasm-bindgen-cli` utility installed.
+
+* `cargo build --target wasm32-unknown-unknown`
+* `wasm-bindgen target/wasm32-unknown-unknown/debug/gui.wasm --out-dir web --web`

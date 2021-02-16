@@ -1,4 +1,4 @@
-use crate::{MonthlyResult, TotalResult};
+use crate::process::{MonthlyResult, TotalResult};
 
 use chrono::Month;
 use num_traits::FromPrimitive;
