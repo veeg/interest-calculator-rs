@@ -6,6 +6,7 @@ use crate::reports::*;
 use chrono::{Datelike, Month, NaiveDate};
 use num_traits::FromPrimitive;
 use std::collections::VecDeque;
+use std::ops::IndexMut;
 
 #[derive(Debug)]
 pub enum CompoundingStrategy {
@@ -137,19 +138,41 @@ impl InteractiveCalculator {
         }
     }
 
-    /// Alter the loan payout day used registered for the LoanEvent::Initial.
+    /// # Panics
+    /// If the index is out of range, the call panics.
+    pub fn event_index(&mut self, index: usize) -> &mut (NaiveDate, LoanEvent) {
+        self.events.index_mut(index)
+    }
+
+    /// Alter the date of this event, by event index.
     ///
-    /// This will modify all subsequent event dates by the same days offset
-    /// to correct the timeline previously established.
-    pub fn change_initial_payout_date(&mut self, _date: NaiveDate) {
+    /// If the index is zero, signaling the LoanEvent::Initial,
+    /// all subsequent events dates are modified with the same offset of days
+    /// to correct the previously established timeline.
+    ///
+    /// # Panics
+    /// If the index is out of range, the call panics.
+    pub fn change_event_date(&mut self, _index: usize, _date: NaiveDate) {
         todo!("implement me");
     }
 
     /// Compute the installment loan result for the lifetime of the loan based on current events.
-    pub fn compute(&self) -> TotalResult {
+    pub fn compute(&self) -> Result<TotalResult, String> {
         // SAFETY(unwrap): events vector always contains 1 element.
         let (payout_date, initial) = self.events.first().unwrap();
         let initial = initial.initial();
+        if initial.loan <= 0.0 {
+            return Err(
+                "expecting non-zero positive value for outstanding loan in initial loan event"
+                    .to_string(),
+            );
+        }
+        if initial.nominal_interest <= 0.0 {
+            return Err(
+                "expecting non-zero positive value for nominal interest in initial loan event"
+                    .to_string(),
+            );
+        }
 
         let mut state = initial_computing_state(payout_date, initial);
 
@@ -183,7 +206,7 @@ impl InteractiveCalculator {
                     // We currently panic on this action.
                     // This is ONLY due a an inconsistency in the day actions implementation.
                     dbg!(date, &state);
-                    panic!(e);
+                    return Err(e);
                 }
             };
 
@@ -196,7 +219,7 @@ impl InteractiveCalculator {
             }
         }
 
-        return TotalResult {
+        return Ok(TotalResult {
             total_cost: dailys.iter().map(|x| x.repayed).sum(),
             total_loan: dailys.iter().map(|x| x.disbursed).sum(),
             total_interest: dailys.iter().map(|x| x.compounded_interest).sum(),
@@ -210,7 +233,7 @@ impl InteractiveCalculator {
             end_date: dailys.last().unwrap().date.clone(),
             planned_terms: state.planned_repayment_terms as i32,
             completed_terms: state.completed_repayment_terms as i32,
-        };
+        });
     }
 
     /// Returns Ok(Some(...)) if actions array has actions for this date.
@@ -349,6 +372,15 @@ impl InteractiveCalculator {
                 state.current_outstanding_loan -= payment;
                 state.completed_repayment_terms += 1;
                 notable.push(NotableEvents::RepaymentInstallment(payment));
+
+                // TODO: We have some corner cases where our calculations are off
+                // with very low numbers. This has manifested itself as negative
+                // current_outstanding_loan. We workaround this issue now
+                // so we dont end up with a panic, and look into addressing this
+                // situation later on.
+                if state.current_outstanding_loan < 0.0 {
+                    finished = true;
+                }
             }
             Some(InstallmentType::InterestOnly) => {
                 // We only process a interest installment if we have not processed a repayment.
@@ -520,11 +552,17 @@ fn installment_date_from_interval(
         TermsPerYear::Six => 2,
         TermsPerYear::Twelve => 1,
     };
-    let month = (current.month0() + increase) % 12;
+    let month = future_month(current, increase);
+    return installment_date_from_target_month(current, due, month);
+}
+
+/// Calculate the future month based on num month increments from provided date.
+pub(crate) fn future_month(date: &NaiveDate, increase: u32) -> Month {
+    // Calculate the increased target month
+    let month = (date.month0() + increase) % 12;
     // SAFETY(unwrap): Calculation above places it in 0-11 range, whilst this method takes 1-12
     // range. Thus, the +1 brings the allowed range into bounds.
-    let month = Month::from_u32(month + 1).unwrap();
-    return installment_date_from_target_month(current, due, month);
+    Month::from_u32(month + 1).unwrap()
 }
 
 /// Calculate the installment date based on:
