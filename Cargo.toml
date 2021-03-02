@@ -4,8 +4,19 @@ version = "0.1.0"
 authors = ["Vegard Sandengen <vegardsandengen@gmail.com>"]
 edition = "2018"
 
-[lib]
-crate-type = ["cdylib", "rlib" ]
+[features]
+default = []
+
+gui = ["iced", "iced_web", "console_error_panic_hook"]
+cli = []
+
+[[bin]]
+name = "cli"
+required-features = ["cli"]
+
+[[bin]]
+name = "gui"
+required-features = ["gui"]
 
 [dependencies]
 env_logger = "*"
@@ -13,6 +24,8 @@ structopt = { version = "0.3", default-features = false }
 chrono = "0.4"
 num-traits = "0.2"
 plotters = "0.3"
-console_error_panic_hook = "0.1"
-iced = "0.2"
-iced_web = "0.3"
+
+# Dependencies related to gui/web
+console_error_panic_hook = { version = "0.1", optional = true }
+iced = { version = "0.2", optional = true }
+iced_web = { version = "0.3", optional = true }

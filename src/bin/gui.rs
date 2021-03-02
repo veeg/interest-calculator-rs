@@ -1,9 +1,12 @@
 //! Run the interest calculator as a native GUI library.
 
-use iced::{Settings, Sandbox};
+use iced::{Sandbox, Settings};
 use interest_calculator::gui::App;
 
 fn main() -> iced::Result {
+    #[cfg(wasm)]
+    panic::set_hook(Box::new(console_error_panic_hook::hook));
+
     env_logger::init();
 
     App::run(Settings::default())

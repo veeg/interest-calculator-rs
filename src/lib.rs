@@ -6,6 +6,7 @@
 
 mod calculator;
 mod events;
+#[cfg(feature = "gui")]
 pub mod gui;
 pub mod plot;
 pub mod reports;
