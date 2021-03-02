@@ -7,7 +7,7 @@ edition = "2018"
 [features]
 default = []
 
-gui = ["iced", "iced_web", "console_error_panic_hook"]
+gui = ["iced", "iced_web", "console_error_panic_hook", "chrono/wasmbind"]
 cli = []
 
 [[bin]]
