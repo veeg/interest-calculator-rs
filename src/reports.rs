@@ -39,6 +39,11 @@ pub struct TotalResult {
     pub total_cost: f64,
     /// The total principal loan sum, aggergated over any additional refinancing.
     pub total_loan: f64,
+    /// The total sum of the disbursed loan has been repayed in nominal repayments
+    /// according to the valid repayment plan at any one time.
+    pub total_repayment_installment: f64,
+    /// The total sum of the disbursed loan that has been repayed in extra installments.
+    pub total_extra_installment: f64,
     /// The total sum of interest payed on the loan over its duration.
     pub total_interest: f64,
     /// The total sum of fees associated with the loan repayment plan.

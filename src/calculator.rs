@@ -21,6 +21,7 @@ enum NotableEvents {
     Initialization(f64),
     RepaymentInstallment(f64),
     InterestOnlyInstallment(f64),
+    ExtraInstallment(f64),
 }
 
 /// The daily result produced by a Calculator.
@@ -71,7 +72,7 @@ struct DayActions {
     /// Do we have any installment action for this day?
     installment: Option<InstallmentType>,
     /// An additional repayment on the principal loan.
-    extra_repayments: Vec<f64>,
+    extra_installments: Vec<f64>,
 }
 
 /// This structure is used to hold the current state of a calculation.
@@ -138,6 +139,13 @@ impl InteractiveCalculator {
         }
     }
 
+    pub fn add_event_extra(&mut self, extra: LoanScheduleExtra) -> Result<(), String> {
+        // TODO: Sanity check date
+        self.events
+            .push((extra.date.clone(), LoanEvent::Extra(extra)));
+        Ok(())
+    }
+
     /// # Panics
     /// If the index is out of range, the call panics.
     pub fn event_index(&mut self, index: usize) -> &mut (NaiveDate, LoanEvent) {
@@ -188,30 +196,59 @@ impl InteractiveCalculator {
         // We may now commence computing each day, adjusting the actions as support for more
         // actions are added.
 
-        //let event_iter = self.events.iter();
-        //// Discard the initial event, we are only here for the remainder of them.
-        //event_iter.next();
-        //let mut next_event = event_iter.next();
+        let mut event_iter = self.events.iter();
+        // Discard the initial event, we are only here for the remainder of them.
+        event_iter.next();
+        let mut potential_event = event_iter.next();
 
         let mut dailys = Vec::new();
-        for date in payout_date.iter_days() {
+        for current_date in payout_date.iter_days() {
             // TODO: Handle events on the calculator
+            // We can achieve this by peaking the an events iterator.
+            // If the date of the event matches today, we can re-calculate/mutate
+            // the daily_actions vector to incorporate the changes.
+            loop {
+                match potential_event {
+                    Some((event_date, next_event)) => {
+                        if event_date == &current_date {
+                            // Process the event
+                            match next_event {
+                                LoanEvent::Extra(schedule) => {
+                                    // Handle the extra payment
+                                    // TODO: Support more than single day extra payment
+                                    if let Some((action_date, action)) = daily_actions.get_mut(0) {
+                                        debug_assert!(action_date == event_date);
+                                        action.extra_installments.push(schedule.amount)
+                                    }
+                                }
+                                _ => {}
+                            }
 
-            // We have nothing to do today!
+                            // Move it along!
+                            potential_event = event_iter.next();
+                        } else {
+                            // In the future
+                            debug_assert!(event_date > &current_date);
+                            break;
+                        }
+                    }
+                    None => break,
+                }
+            }
 
-            let actions = match Self::fetch_date_action(date, &mut daily_actions) {
+            let actions = match Self::fetch_date_action(current_date, &mut daily_actions) {
                 Ok(Some(a)) => a,
                 Ok(None) => continue,
                 Err(e) => {
                     // We currently panic on this action.
                     // This is ONLY due a an inconsistency in the day actions implementation.
-                    dbg!(date, &state);
+                    dbg!(current_date, &state);
                     return Err(e);
                 }
             };
 
             // Process this days actions.
-            let (daily, finished) = Self::process_day_action(&mut state, date, actions);
+            let (daily, finished) = Self::process_day_action(&mut state, current_date, actions);
             dailys.push(daily);
 
             if finished {
@@ -222,6 +259,8 @@ impl InteractiveCalculator {
         return Ok(TotalResult {
             total_cost: dailys.iter().map(|x| x.repayed).sum(),
             total_loan: dailys.iter().map(|x| x.disbursed).sum(),
+            total_repayment_installment: dailys.iter().map(|x| x.repayment_installment).sum(),
+            total_extra_installment: dailys.iter().map(|x| x.extra_installment).sum(),
             total_interest: dailys.iter().map(|x| x.compounded_interest).sum(),
             total_fee: dailys.iter().map(|x| x.fee).sum(),
 
@@ -287,6 +326,7 @@ impl InteractiveCalculator {
         let mut daily_repayed = 0.0;
         let mut daily_interest_installment = 0.0;
         let mut daily_repayment_installment = 0.0;
+        let mut daily_extra_installment = 0.0;
         let mut daily_compounded_interest = 0.0;
         let mut daily_fees = 0.0;
         let mut daily_disbursed = 0.0;
@@ -320,6 +360,19 @@ impl InteractiveCalculator {
                 / 365f64;
             state.accrued_interest += daily_accrued_interest;
             state.accrued_interest_since_last_installment += daily_accrued_interest;
+        }
+
+        // If any extra installments have been scheduled on this day, we need to account
+        // for it.
+        //
+        // TODO: Check if the extra installment would brind the outstanding loan to zero.
+        // Could be useful to do this check after installment check as well.
+        for extra in actions.extra_installments.iter() {
+            daily_extra_installment += extra;
+            daily_repayed += extra;
+            state.current_outstanding_loan -= extra;
+
+            notable.push(NotableEvents::ExtraInstallment(*extra));
         }
 
         // Check if we should post the accrued interest to the loan
@@ -404,7 +457,7 @@ impl InteractiveCalculator {
             repayed: daily_repayed,
             repayment_installment: daily_repayment_installment,
             interest_installment: daily_interest_installment,
-            extra_installment: 0.0,
+            extra_installment: daily_extra_installment,
 
             notable_events: notable,
         };
@@ -479,7 +532,7 @@ fn compute_actions_on_disbursement(
             interest_accumulating: true,
             interest_compounding: false,
             installment: None,
-            extra_repayments: Vec::new(),
+            extra_installments: Vec::new(),
         };
 
         // Check for if we have any installment type for today
