@@ -1,6 +1,6 @@
 //! This module encapsulates the API used to interact with the library.
 
-use chrono::{Month, NaiveDate};
+use chrono::Month;
 
 /// Each variant of a LoanEvent details the various events that can occur
 /// for the lifetime of the loan.
@@ -19,7 +19,7 @@ pub enum LoanEvent {
     /// We inject new capital into the loan.
     Refinance(LoanRefinance),
     /// Extra scheduled installments for a period of time.
-    Extra(LoanScheduleExtra),
+    Extra(LoanRecurringExtraInstallments),
     /// We schedule a installment freeze, only interest will be owed.
     RepaymentFreeze(LoanRepaymentFreeze),
 }
@@ -81,7 +81,7 @@ impl TermsPerYear {
 }
 
 /// The initial state of a loan.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct LoanInitialization {
     /// The total loan sum.
     pub loan: f64,
@@ -109,7 +109,7 @@ pub struct LoanInitialization {
 
 /// An event to describe the transfer of a loan from one bank to another.
 /// Terms and installment dates will be transferred from the last bank.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct LoanTransfer {
     /// When issuing a loan, some banks will charge an administration fee for
     /// issuing the loan. This can be added to the loan sum and will be part of the
@@ -118,17 +118,15 @@ pub struct LoanTransfer {
 }
 
 /// An event to describe an interest change on a loan.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct LoanInterestChange {
     /// This is the new interest on the loan, effective from date.
     pub nominal_interest: f64,
 }
 
 /// An event to describe an refinacing action.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct LoanRefinance {
-    /// The date of the refinance
-    pub date: NaiveDate,
     /// The total to increase the loan by.
     pub loan_increase: f64,
     /// Any administration fee related to the refinancing appropriation will be added
@@ -137,7 +135,7 @@ pub struct LoanRefinance {
 }
 
 /// A recurring interval selection within a year.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum RecurringInterval {
     /// Every week.
     Weekly,
@@ -158,25 +156,29 @@ pub enum RecurringInterval {
 }
 
 /// An event to schedule a set of extra payments on the loan.
-#[derive(Debug)]
-pub struct LoanScheduleExtra {
-    /// The date of the first extra payment.
-    pub date: NaiveDate,
+#[derive(Clone, Debug)]
+pub struct LoanRecurringExtraInstallments {
     /// The amount per extra payments
     pub amount: f64,
-    /// The number of extra payment events
+    /// The number of extra payment events.
+    /// This MAY be 1, where the recurring interval will have no effect.
+    /// You may rather use LoanExtraInstallment event for a one-off extra installment.
     pub count: std::num::NonZeroU32,
     /// The interval to issue any additional extra payments outside one.
     pub recurring_interval: RecurringInterval,
 }
 
+/// An event to add a single extra installment.
+#[derive(Clone, Debug)]
+pub struct LoanExtraInstallment {
+    /// The amount per extra payments
+    pub amount: f64,
+}
+
 /// An event that freezes the current repayment installments.
 /// Only interest installments must be made.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct LoanRepaymentFreeze {
-    /// The date this freeze was issued.
-    /// The next pending repayment installment will be void.
-    pub date: NaiveDate,
     /// The number of repayment installment freezes.
     pub count: std::num::NonZeroU32,
 }

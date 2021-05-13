@@ -8,8 +8,8 @@ mod calculator;
 mod events;
 #[cfg(feature = "gui")]
 pub mod gui;
-pub mod plot;
-pub mod reports;
+mod reports;
 
 pub use calculator::{CompoundingStrategy, InteractiveCalculator};
 pub use events::*;
+pub use reports::TotalResult;

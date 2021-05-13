@@ -5,8 +5,7 @@ use crate::reports::*;
 
 use chrono::{Datelike, Month, NaiveDate};
 use num_traits::FromPrimitive;
-use std::collections::VecDeque;
-use std::ops::IndexMut;
+use std::collections::{BTreeMap, VecDeque};
 
 #[derive(Debug)]
 pub enum CompoundingStrategy {
@@ -128,46 +127,62 @@ pub struct InteractiveCalculator {
     /// The set of events, ordered by date.
     /// The first element is guaranteed to be LoanEvent::Initial,
     /// meaning no later element may have a date prior to the LoanEvent::Initial date.
-    events: Vec<(NaiveDate, LoanEvent)>,
+    events: BTreeMap<NaiveDate, Vec<LoanEvent>>,
 }
 
 impl InteractiveCalculator {
     /// Construct a new InteractiveCalculator with the initial loan event.
     pub fn new(date: NaiveDate, initial: LoanInitialization) -> Self {
-        InteractiveCalculator {
-            events: vec![(date, LoanEvent::Initial(initial))],
-        }
+        let mut map = BTreeMap::new();
+        map.insert(date, vec![LoanEvent::Initial(initial)]);
+        InteractiveCalculator { events: map }
     }
 
-    pub fn add_event_extra(&mut self, extra: LoanScheduleExtra) -> Result<(), String> {
+    /// Add an extra installment event to the calculator.
+    pub fn add_event_extra_single(
+        &mut self,
+        date: NaiveDate,
+        extra: LoanExtraInstallment,
+    ) -> Result<(), String> {
+        // Simply convert it to a recurring one with count 1, and delegate to other method.
+        let extra = LoanRecurringExtraInstallments {
+            amount: extra.amount,
+            count: std::num::NonZeroU32::new(1).unwrap(),
+            recurring_interval: RecurringInterval::Monthly,
+        };
+
+        self.add_event_extra_recurring(date, extra)
+    }
+
+    /// Add an extra installment event to the calculator.
+    // TODO: Make this public once we've implemented it properly
+    fn add_event_extra_recurring(
+        &mut self,
+        date: NaiveDate,
+        extra: LoanRecurringExtraInstallments,
+    ) -> Result<(), String> {
         // TODO: Sanity check date
         self.events
-            .push((extra.date.clone(), LoanEvent::Extra(extra)));
+            .entry(date)
+            .and_modify(|e| e.push(LoanEvent::Extra(extra.clone())))
+            .or_insert(vec![LoanEvent::Extra(extra)]);
         Ok(())
-    }
-
-    /// # Panics
-    /// If the index is out of range, the call panics.
-    pub fn event_index(&mut self, index: usize) -> &mut (NaiveDate, LoanEvent) {
-        self.events.index_mut(index)
-    }
-
-    /// Alter the date of this event, by event index.
-    ///
-    /// If the index is zero, signaling the LoanEvent::Initial,
-    /// all subsequent events dates are modified with the same offset of days
-    /// to correct the previously established timeline.
-    ///
-    /// # Panics
-    /// If the index is out of range, the call panics.
-    pub fn change_event_date(&mut self, _index: usize, _date: NaiveDate) {
-        todo!("implement me");
     }
 
     /// Compute the installment loan result for the lifetime of the loan based on current events.
     pub fn compute(&self) -> Result<TotalResult, String> {
+        let mut events_iter = self.events.iter();
+
         // SAFETY(unwrap): events vector always contains 1 element.
-        let (payout_date, initial) = self.events.first().unwrap();
+        let (payout_date, initial) = events_iter.next().unwrap();
+        if initial.len() > 1 {
+            return Err(
+                "Unexpected amount of events on loan initialization, expected one".to_string(),
+            );
+        }
+        // SAFETY(unwrap): guarded to contain one item.
+        let initial = initial.first().unwrap();
+
         let initial = initial.initial();
         if initial.loan <= 0.0 {
             return Err(
@@ -192,50 +207,39 @@ impl InteractiveCalculator {
             &state,
         );
 
-        // We have now initialized the calculator with the initial event.
-        // We may now commence computing each day, adjusting the actions as support for more
-        // actions are added.
-
-        let mut event_iter = self.events.iter();
-        // Discard the initial event, we are only here for the remainder of them.
-        event_iter.next();
-        let mut potential_event = event_iter.next();
+        // We can now consume future events as their date approaches.
+        let mut potential_events = events_iter.next();
 
         let mut dailys = Vec::new();
         for current_date in payout_date.iter_days() {
-            // TODO: Handle events on the calculator
-            // We can achieve this by peaking the an events iterator.
-            // If the date of the event matches today, we can re-calculate/mutate
-            // the daily_actions vector to incorporate the changes.
-            loop {
-                match potential_event {
-                    Some((event_date, next_event)) => {
-                        if event_date == &current_date {
-                            // Process the event
-                            match next_event {
-                                LoanEvent::Extra(schedule) => {
-                                    // Handle the extra payment
-                                    // TODO: Support more than single day extra payment
-                                    if let Some((action_date, action)) = daily_actions.get_mut(0) {
-                                        debug_assert!(action_date == event_date);
-                                        action.extra_installments.push(schedule.amount)
-                                    }
+            // Handle events that may alter the daily_actions
+            match potential_events {
+                Some((event_date, next_events)) if event_date == &current_date => {
+                    // A day can have multiple events
+                    for day_event in next_events.iter() {
+                        match day_event {
+                            LoanEvent::Extra(schedule) => {
+                                // Handle the extra payment
+                                // TODO: Support more than single day extra payment
+                                if let Some((action_date, action)) = daily_actions.get_mut(0) {
+                                    debug_assert!(action_date == event_date);
+                                    action.extra_installments.push(schedule.amount)
                                 }
-                                _ => {}
                             }
-
-                            // Move it along!
-                            potential_event = event_iter.next();
-                        } else {
-                            // In the future
-                            debug_assert!(event_date > &current_date);
-                            break;
+                            _ => {}
                         }
                     }
-                    None => break,
+
+                    potential_events = events_iter.next();
                 }
+                Some((event_date, _)) if event_date < &current_date => {
+                    return Err("event_date is in the past".to_string());
+                }
+                Some(_) => {}
+                None => {}
             }
 
+            // Retrieve this days actions.
             let actions = match Self::fetch_date_action(current_date, &mut daily_actions) {
                 Ok(Some(a)) => a,
                 Ok(None) => continue,
